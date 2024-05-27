@@ -15,18 +15,18 @@ func MakeRGBA(width, height int) *Image {
 	}
 	buf := img.Pixels
 	g := byte(0)
-	b := byte(0)
 	p := 0
 	a := byte(255)
 	for y := 0; y < height; y++ {
 		r := byte(0)
+		b := byte(255)
 		for x := 0; x < width; x++ {
 			buf[p] = r
 			buf[p+1] = g
 			buf[p+2] = b
 			buf[p+3] = a
-			r += 3
-			b += 5
+			r += 1
+			b -= 1
 			p += 4
 		}
 		g += 1
@@ -35,8 +35,8 @@ func MakeRGBA(width, height int) *Image {
 }
 
 func TestCompress(t *testing.T) {
-	w := 300
-	h := 200
+	w := 255
+	h := 255
 	raw1 := MakeRGBA(w, h)
 	params := MakeCompressParams(PixelFormatRGBA, Sampling444, 90, 0)
 	jpg, err := Compress(raw1, params)
