@@ -1,7 +1,8 @@
 package turbo
 
 /*
-#cgo LDFLAGS: -lturbojpeg
+#cgo CFLAGS: -I/opt/libjpeg-turbo/include
+#cgo LDFLAGS: -L/opt/libjpeg-turbo/lib64 -lturbojpeg
 #include <turbojpeg.h>
 */
 import "C"
