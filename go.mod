@@ -1,4 +1,4 @@
-module github.com/bmharper/turbo
+module github.com/mellekoning/turbo
 
 go 1.13
 

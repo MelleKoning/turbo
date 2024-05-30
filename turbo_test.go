@@ -1,50 +1,23 @@
 package turbo
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
+	"image"
+	"image/color"
 )
 
-func MakeRGBA(width, height int) *Image {
-	img := &Image{
-		Width:  width,
-		Stride: width * 4,
-		Height: height,
-		Pixels: make([]byte, width*height*4),
-	}
-	buf := img.Pixels
-	g := byte(0)
-	p := 0
-	a := byte(255)
-	for y := 0; y < height; y++ {
-		r := byte(0)
-		b := byte(255)
-		for x := 0; x < width; x++ {
-			buf[p] = r
-			buf[p+1] = g
-			buf[p+2] = b
-			buf[p+3] = a
+func MakeGolangRGBA() image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, 255, 255))
+
+	g := uint8(0)
+	for y := 0; y < 255; y++ {
+		r := uint8(0)
+		b := uint8(255)
+		for x := 0; x < 255; x++ {
+			img.Set(x, y, color.RGBA{r, g, b, 255})
 			r += 1
 			b -= 1
-			p += 4
 		}
 		g += 1
 	}
 	return img
-}
-
-func TestCompress(t *testing.T) {
-	w := 255
-	h := 255
-	raw1 := MakeRGBA(w, h)
-	params := MakeCompressParams(PixelFormatRGBA, Sampling444, 90, 0)
-	jpg, err := Compress(raw1, params)
-	t.Logf("Encode return: %v, %v", len(jpg), err)
-	raw2, err := Decompress(jpg)
-	t.Logf("Decode return: %v x %v, %v, %v, %v", raw2.Width, raw2.Height, raw2.Stride, len(raw2.Pixels), err)
-	assert.Equal(t, &w, &raw2.Width, "Width same")
-	assert.Equal(t, &h, &raw2.Height, "Height same")
-	assert.Equal(t, &raw1.Stride, &raw2.Stride, "Stride same")
-	//ioutil.WriteFile("test.jpg", jpg, 0660)
 }

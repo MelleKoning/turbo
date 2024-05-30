@@ -1,64 +1,116 @@
 package turbo
 
 /*
-#cgo pkg-config: libturbojpeg
 #cgo CFLAGS: -I/opt/libjpeg-turbo/include
 #cgo LDFLAGS: -L/opt/libjpeg-turbo/lib64 -lturbojpeg -Wl,-rpath=/opt/libjpeg-turbo/lib64
+
+#include <stdlib.h>
+#include <stdio.h>
 #include <turbojpeg.h>
+
+// Function to compress an image using libjpeg-turbo
+unsigned char* compressImage(unsigned char* image, int width, int height, unsigned long* jpegSize) {
+    tjhandle handle = tjInitCompress();
+    unsigned char* jpegBuf = NULL;
+
+    tjCompress2(handle, image, width, 0, height, TJPF_RGB, &jpegBuf, jpegSize, TJSAMP_444, 80, TJFLAG_FASTDCT);
+
+    tjDestroy(handle);
+    return jpegBuf;
+}
 */
 import "C"
-import "fmt"
-
-type Sampling C.int
-
-const (
-	Sampling444  Sampling = C.TJSAMP_444
-	Sampling422  Sampling = C.TJSAMP_422
-	Sampling420  Sampling = C.TJSAMP_420
-	SamplingGray Sampling = C.TJSAMP_GRAY
+import (
+	"bytes"
+	"errors"
+	"image"
+	"image/draw"
+	"io"
+	"os"
+	"unsafe"
 )
 
-type PixelFormat C.int
+func CompressImage(img image.Image) ([]byte, error) {
+	bounds := img.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
 
-const (
-	PixelFormatRGB     PixelFormat = C.TJPF_RGB
-	PixelFormatBGR     PixelFormat = C.TJPF_BGR
-	PixelFormatRGBX    PixelFormat = C.TJPF_RGBX
-	PixelFormatBGRX    PixelFormat = C.TJPF_BGRX
-	PixelFormatXBGR    PixelFormat = C.TJPF_XBGR
-	PixelFormatXRGB    PixelFormat = C.TJPF_XRGB
-	PixelFormatGRAY    PixelFormat = C.TJPF_GRAY
-	PixelFormatRGBA    PixelFormat = C.TJPF_RGBA
-	PixelFormatBGRA    PixelFormat = C.TJPF_BGRA
-	PixelFormatABGR    PixelFormat = C.TJPF_ABGR
-	PixelFormatARGB    PixelFormat = C.TJPF_ARGB
-	PixelFormatCMYK    PixelFormat = C.TJPF_CMYK
-	PixelFormatUNKNOWN PixelFormat = C.TJPF_UNKNOWN
-)
+	// Convert image to RGB format
+	rgbImg := image.NewRGBA(image.Rect(0, 0, width, height))
+	draw.Draw(rgbImg, rgbImg.Bounds(), img, bounds.Min, draw.Src)
 
-type Flags C.int
+	// Get image data
+	imgData := rgbImg.Pix
 
-const (
-	FlagAccurateDCT   Flags = C.TJFLAG_ACCURATEDCT
-	FlagBottomUp      Flags = C.TJFLAG_BOTTOMUP
-	FlagFastDCT       Flags = C.TJFLAG_FASTDCT
-	FlagFastUpsample  Flags = C.TJFLAG_FASTUPSAMPLE
-	FlagNoRealloc     Flags = C.TJFLAG_NOREALLOC
-	FlagProgressive   Flags = C.TJFLAG_PROGRESSIVE
-	FlagStopOnWarning Flags = C.TJFLAG_STOPONWARNING
-)
+	// Call C function to compress image
+	cImgData := C.CBytes(imgData)
+	defer C.free(cImgData)
 
-func makeError(handler C.tjhandle, returnVal C.int) error {
-	if returnVal == 0 {
-		return nil
-	}
-	str := C.GoString(C.tjGetErrorStr2(handler))
-	return fmt.Errorf("turbojpeg error: %v", str)
+	var size C.ulong
+	jpegData := C.compressImage((*C.uchar)(cImgData), C.int(width), C.int(height), &size)
+
+	defer C.free(unsafe.Pointer(jpegData))
+
+	// Convert C array to Go slice
+	jpegBytes := C.GoBytes(unsafe.Pointer(jpegData), C.int(size))
+
+	return jpegBytes, nil
 }
 
-type Image struct {
-	Width  int
-	Height int
-	Stride int
-	Pixels []byte
+func LoadImage(filename string) image.Image {
+	file, err := os.Open(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	img, err := DecodeJPEG(file)
+	if err != nil {
+		panic(err)
+	}
+
+	return img
+}
+
+func SaveImage(filename string, data []byte) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.Write(data)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func DecodeJPEG(r io.Reader) (image.Image, error) {
+	buf := new(bytes.Buffer)
+	if _, err := io.Copy(buf, r); err != nil {
+		return nil, err
+	}
+
+	cData := C.CBytes(buf.Bytes())
+	defer C.free(cData)
+
+	cInfo := C.tjInitDecompress()
+	defer C.tjDestroy(cInfo)
+
+	var width C.int
+	var height C.int
+	var subsamp C.int
+
+	if C.tjDecompressHeader2(cInfo, (*C.uchar)(cData), C.ulong(len(buf.Bytes())), &width, &height, &subsamp) != 0 {
+		return nil, errors.New("failed to decompress JPEG header")
+	}
+
+	img := image.NewRGBA(image.Rect(0, 0, int(width), int(height)))
+
+	if C.tjDecompress2(cInfo, (*C.uchar)(cData), C.ulong(len(buf.Bytes())), (*C.uchar)(unsafe.Pointer(&img.Pix[0])), width, 0, height, C.TJPF_RGB, 0) != 0 {
+		return nil, errors.New("failed to decompress JPEG image")
+	}
+
+	return img, nil
 }
