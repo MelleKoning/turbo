@@ -147,4 +147,4 @@ You have to put JPG images in the folder and adjust the benchmark code to load a
 
 Run the benchmark tests as follows:
 
-`go test -bench=. -run=Bench -benchtime 3s`
+`go test -bench=. -run=Bench -benchtime 4s`
